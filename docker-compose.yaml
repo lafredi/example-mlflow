@@ -1,0 +1,81 @@
+version: "3.9"
+    
+services:
+
+    database:
+        restart: always
+        image:  mysql/mysql-server:5.7.28
+        container_name: mlflow_db
+        ports:
+            - "3306:3306"
+        networks:
+            - backend
+        environment:
+            MYSQL_DATABASE: ${MYSQL_DATABASE}
+            MYSQL_USER: ${MYSQL_USER}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+        volumes:
+            - ./mysql_data:/var/lib/mysql
+
+    registry:
+        restart: always
+        image: minio/minio:RELEASE.2021-06-17T00-10-46Z
+        container_name: mlflow_models
+        ports:
+            - "9000:9000"
+        networks:
+            - backend
+            - frontend
+        volumes:
+            - ./minio_data:/data
+        environment:
+            MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+            MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+            interval: 30s
+            timeout: 20s
+            retries: 3
+        command: server /data
+
+    mlflow:
+        restart: always
+        build: ./mlflow
+        image: innolab/mlflow
+        container_name: mlflow_ui
+        ports:
+            - "5001:5001"
+        networks:
+            - frontend
+            - backend
+        depends_on:
+            - database
+            - registry
+        environment:
+            MLFLOW_S3_ENDPOINT_URL: http://localhost:9000
+            AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+            AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+        command: mlflow server --backend-store-uri mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@database:3306/${MYSQL_DATABASE} --default-artifact-root s3://mlflow --host 0.0.0.0
+
+    nginx:
+        restart: always
+        build: ./nginx
+        image: innolab/nginx
+        container_name: mlflow_ng
+        ports:
+            - "80:80"
+        networks:
+            - frontend
+        depends_on:
+            - mlflow
+
+networks:
+    frontend:
+        driver: bridge
+    backend:
+        driver: bridge
+
+volumes:
+    mlflow_data:
+    mysql_data:
