@@ -1,3 +1,13 @@
+
+# locale
+
+.vscode
+.venv
+mysql_data/*
+mlflow_data/*
+minio_data/*
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
